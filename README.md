@@ -14,7 +14,7 @@ Tracks the number of active Zaps using each Zapier app connection over time. Dai
 
 ## Requirements
 
-- Node.js 20+
+- Node.js 24.16.0
 - A Zapier account with access to the asset management API (browser session)
 - A Google Cloud service account with access to your target spreadsheet
 
