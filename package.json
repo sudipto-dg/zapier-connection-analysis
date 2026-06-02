@@ -1,0 +1,25 @@
+{
+  "name": "zapier-connection-analysis",
+  "version": "1.0.0",
+  "description": "Daily Zapier connection usage snapshots to Google Sheets",
+  "main": "src/main.js",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/main.js",
+    "collect": "node src/main.js"
+  },
+  "keywords": [
+    "zapier",
+    "connections",
+    "google-sheets"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.9.0",
+    "dotenv": "^16.5.0",
+    "googleapis": "^148.0.0"
+  }
+}

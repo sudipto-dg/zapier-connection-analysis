@@ -1,0 +1,51 @@
+name: Daily Connection Snapshot
+
+on:
+  schedule:
+    # 00:30 UTC = 06:00 IST (India Standard Time, UTC+5:30)
+    - cron: '30 0 * * *'
+  workflow_dispatch:
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Write Zapier config
+        env:
+          ZAPIER_CONFIG_JSON: ${{ secrets.ZAPIER_CONFIG_JSON }}
+        run: |
+          if [ -z "$ZAPIER_CONFIG_JSON" ]; then
+            echo "::error::GitHub secret ZAPIER_CONFIG_JSON is not set. Add the full contents of config/zapier-config.json as a repository secret."
+            exit 1
+          fi
+          printf '%s' "$ZAPIER_CONFIG_JSON" > config/zapier-config.json
+
+      - name: Write Google service account credentials
+        env:
+          GOOGLE_SERVICE_ACCOUNT_JSON: ${{ secrets.GOOGLE_SERVICE_ACCOUNT_JSON }}
+        run: |
+          if [ -z "$GOOGLE_SERVICE_ACCOUNT_JSON" ]; then
+            echo "::error::GitHub secret GOOGLE_SERVICE_ACCOUNT_JSON is not set. Add the full service account key JSON as a repository secret."
+            exit 1
+          fi
+          mkdir -p credentials
+          printf '%s' "$GOOGLE_SERVICE_ACCOUNT_JSON" > credentials/google-service-account.json
+
+      - name: Run daily snapshot
+        env:
+          GOOGLE_SHEET_ID: ${{ secrets.GOOGLE_SHEET_ID }}
+          GOOGLE_SERVICE_ACCOUNT_KEY_PATH: credentials/google-service-account.json
+          SNAPSHOT_TIMEZONE: Asia/Kolkata
+        run: npm run collect

@@ -1,0 +1,19 @@
+{
+  "searchZapsEndpoint": "https://zapier.com/api/asset-management-bff/trpc/zap.searchZaps",
+  "endpoint": "https://zapier.com/api/asset-management-bff/trpc/authentication.authentications",
+  "headers": {
+    "Cookie": "PASTE_FROM_CHROME_DEVTOOLS",
+    "Accept": "*/*",
+    "User-Agent": "Mozilla/5.0"
+  },
+  "queryInput": {
+    "includeZapCount": true,
+    "limit": 100,
+    "offset": 0,
+    "ordering": "-updated_at",
+    "owner": "",
+    "search": "",
+    "selectedApi": "MySQLCLIAPI",
+    "status": "all"
+  }
+}
