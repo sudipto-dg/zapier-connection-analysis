@@ -176,13 +176,72 @@ function rowToValues(row) {
   ];
 }
 
+function rowKey(snapshotDate, connectionId) {
+  return `${String(snapshotDate).trim()}|${String(connectionId).trim()}`;
+}
+
+async function loadExistingRowIndexByKey(sheets, sheetId, worksheetName) {
+  const range = `'${worksheetName}'!A2:B`;
+  const response = await sheets.spreadsheets.values.get({
+    spreadsheetId: sheetId,
+    range,
+  });
+
+  const byKey = new Map();
+  const dataRows = response.data.values || [];
+
+  for (let i = 0; i < dataRows.length; i++) {
+    const [snapshotDate, connectionId] = dataRows[i] || [];
+    if (snapshotDate == null || snapshotDate === '' || connectionId == null || connectionId === '') {
+      continue;
+    }
+
+    const key = rowKey(snapshotDate, connectionId);
+    const sheetRow = i + 2;
+    const existing = byKey.get(key);
+    if (existing) {
+      existing.push(sheetRow);
+    } else {
+      byKey.set(key, [sheetRow]);
+    }
+  }
+
+  return byKey;
+}
+
+function splitRowsForUpsert(rows, existingByKey, worksheetName) {
+  const toAppend = [];
+  const updateData = [];
+  let updated = 0;
+
+  for (const row of rows) {
+    const key = rowKey(row.snapshot_date, row.connection_id);
+    const sheetRows = existingByKey.get(key);
+
+    if (sheetRows?.length) {
+      const values = [rowToValues(row)];
+      for (const sheetRow of sheetRows) {
+        updateData.push({
+          range: `'${worksheetName}'!A${sheetRow}:I${sheetRow}`,
+          values,
+        });
+        updated += 1;
+      }
+    } else {
+      toAppend.push(row);
+    }
+  }
+
+  return { toAppend, updateData, updated };
+}
+
 async function appendSnapshotRows(rows, options = {}) {
   const { sheetId, keyPath } = validateEnvironment();
   const clientEmail = readClientEmail(keyPath);
 
   if (rows.length === 0) {
     console.warn('[sheets] No rows to append.');
-    return { appended: 0 };
+    return { appended: 0, updated: 0 };
   }
 
   let sheets;
@@ -204,22 +263,44 @@ async function appendSnapshotRows(rows, options = {}) {
     );
     await ensureHeaders(sheets, sheetId, worksheetSheetId, worksheetName);
 
-    const values = rows.map(rowToValues);
-    const range = `'${worksheetName}'!A:I`;
-
-    const response = await sheets.spreadsheets.values.append({
-      spreadsheetId: sheetId,
-      range,
-      valueInputOption: 'USER_ENTERED',
-      insertDataOption: 'INSERT_ROWS',
-      requestBody: { values },
-    });
-
-    const updated = response.data.updates?.updatedRows ?? rows.length;
-    console.log(
-      `[sheets] Appended ${updated} row(s) to "${worksheetName}".`
+    const existingByKey = await loadExistingRowIndexByKey(
+      sheets,
+      sheetId,
+      worksheetName
     );
-    return { appended: updated };
+    const { toAppend, updateData, updated } = splitRowsForUpsert(
+      rows,
+      existingByKey,
+      worksheetName
+    );
+
+    if (updateData.length > 0) {
+      await sheets.spreadsheets.values.batchUpdate({
+        spreadsheetId: sheetId,
+        requestBody: {
+          valueInputOption: 'USER_ENTERED',
+          data: updateData,
+        },
+      });
+    }
+
+    let appended = 0;
+    if (toAppend.length > 0) {
+      const range = `'${worksheetName}'!A:I`;
+      const response = await sheets.spreadsheets.values.append({
+        spreadsheetId: sheetId,
+        range,
+        valueInputOption: 'USER_ENTERED',
+        insertDataOption: 'INSERT_ROWS',
+        requestBody: { values: toAppend.map(rowToValues) },
+      });
+      appended = response.data.updates?.updatedRows ?? toAppend.length;
+    }
+
+    console.log(
+      `[sheets] Updated ${updated} row(s), appended ${appended} row(s) to "${worksheetName}".`
+    );
+    return { appended, updated };
   } catch (err) {
     const message = err.message || String(err);
     const isPermission =
@@ -247,6 +328,9 @@ module.exports = {
   validateEnvironment,
   appendSnapshotRows,
   resolveWorksheetName,
+  rowKey,
+  loadExistingRowIndexByKey,
+  splitRowsForUpsert,
   DEFAULT_WORKSHEET_NAME,
   HEADERS,
   GoogleConfigError,

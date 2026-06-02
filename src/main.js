@@ -83,13 +83,17 @@ async function main() {
     const connections = await fetchAllConnections(config);
     const rows = toSnapshotRows(connections, snapshotDate);
 
-    await appendSnapshotRows(rows, { worksheetName });
+    const { appended, updated } = await appendSnapshotRows(rows, {
+      worksheetName,
+    });
 
     const totalLiveZapCount = rows.reduce((sum, row) => sum + row.zap_count, 0);
     const duration = Date.now() - startTime;
 
     console.log('\n=== Summary ===');
     console.log(`Connections processed: ${rows.length}`);
+    console.log(`Rows updated:          ${updated}`);
+    console.log(`Rows appended:         ${appended}`);
     console.log(`Total live zap count: ${totalLiveZapCount}`);
     console.log(`Execution duration:  ${formatDuration(duration)}`);
     console.log('\nDone.');

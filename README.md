@@ -1,14 +1,14 @@
 # Zapier Connection Usage Tracker
 
-Tracks the number of active Zaps using each Zapier app connection over time. Daily snapshots are appended to Google Sheets so you can build pivot tables and trend charts (for example, declining usage during a migration).
+Tracks the number of active Zaps using each Zapier app connection over time. Daily snapshots are written to Google Sheets so you can build pivot tables and trend charts (for example, declining usage during a migration).
 
 ## How it works
 
 1. Loads Zapier session credentials from `config/zapier-config.json` (browser Cookie — never committed).
 2. Calls Zapier’s internal authentications API for connections matching `queryInput.selectedApi` (with pagination).
 3. For each connection, calls `zap.searchZaps` with `status: "on"` and records the **live** zap count (`result.data.count`).
-4. Appends one row per connection per run to a worksheet named `{app}_connection_usage_history` (e.g. `mysql_connection_usage_history` for `MySQLCLIAPI`; created automatically if missing).
-5. Historical rows are never overwritten.
+4. Writes one row per connection per snapshot date to a worksheet named `{app}_connection_usage_history` (e.g. `mysql_connection_usage_history` for `MySQLCLIAPI`; created automatically if missing). New connections are appended; same-day re-runs update existing rows for that `(snapshot_date, connection_id)` instead of duplicating.
+5. Rows from earlier calendar days are never overwritten. Only the current snapshot date is upserted.
 
 > **Note:** `zap_count` reflects **live (on) Zaps only**, not the total from the connections list (which includes deactivated Zaps). Rows captured before this change may show the older total-count semantics — treat them accordingly in pivot tables and charts.
 
@@ -24,7 +24,7 @@ Tracks the number of active Zaps using each Zapier app connection over time. Dai
 ├── src/
 │   ├── main.js              # Entry point
 │   ├── zapier-client.js     # Zapier API + transforms
-│   └── google-sheets.js     # Google Sheets append
+│   └── google-sheets.js     # Google Sheets upsert/append
 ├── config/
 │   ├── zapier-config.example.json
 │   └── zapier-config.json   # You create this (gitignored)
@@ -147,10 +147,12 @@ Example output:
 [zapier] Fetching live (on) zap counts for 12 connection(s) (concurrency: 5)...
 [zapier] Live zap counts: 12/12 — Aurora Read Replica (62900274): 55
 [zapier] Live zap count phase completed in 2.41s
-[sheets] Appended 12 row(s) to "mysql_connection_usage_history".
+[sheets] Updated 0 row(s), appended 12 row(s) to "mysql_connection_usage_history".
 
 === Summary ===
 Connections processed: 12
+Rows updated:          0
+Rows appended:         12
 Total live zap count: 245
 Execution duration:  5.83s
 ```
@@ -168,6 +170,12 @@ Execution duration:  5.83s
 | `last_changed` | Last change timestamp |
 | `shared_with_all` | Shared-with-team flag |
 | `account_id` | Owning account ID |
+
+### Same-day re-runs (idempotent)
+
+Each worksheet keeps at most one logical row per `(snapshot_date, connection_id)`. If you run the collector twice on the same day (locally or via GitHub Actions), the second run **updates** today’s rows with fresh counts instead of appending duplicates. Older dates are left unchanged.
+
+Rows duplicated **before** this behavior was added are not removed automatically; re-running on those dates will update every matching duplicate row to the same values. You can delete extra historical duplicates manually if needed.
 
 ## Reporting in Google Sheets
 
